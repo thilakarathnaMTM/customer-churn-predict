@@ -1,6 +1,4 @@
-from pydantic import BaseModel
-
-from app.schemas.retention import RetentionMessageResponse, SmsLogEntry
+from pydantic import BaseModel, Field
 
 
 class CustomerSummary(BaseModel):
@@ -10,7 +8,6 @@ class CustomerSummary(BaseModel):
     tenure: float | None
     prefered_order_cat: str | None
     complain: int | None
-    sentiment_label: str | None
 
     class Config:
         from_attributes = True
@@ -25,30 +22,15 @@ class CustomerListResponse(BaseModel):
 
 class CustomerProfile(BaseModel):
     tenure: float | None
-    city_tier: int | None
-    warehouse_to_home: float | None
-    preferred_login_device: str | None
-    preferred_payment_mode: str | None
-    gender: str | None
-    hour_spend_on_app: float | None
-    number_of_device_registered: int | None
-    prefered_order_cat: str | None
-    satisfaction_score: int | None
-    marital_status: str | None
-    number_of_address: int | None
     complain: int | None
-    order_amount_hike_from_last_year: float | None
-    coupon_used: float | None
-    order_count: float | None
     day_since_last_order: float | None
     cashback_amount: float | None
-    review_text: str | None
-    review_rating: int | None
-    sentiment_score: float | None
-    sentiment_label: str | None
-    review_is_synthetic: bool
-    last_product_purchased: str | None
-    last_product_purchased_is_generated: bool
+    satisfaction_score: int | None
+    number_of_address: int | None
+    order_count: float | None
+    warehouse_to_home: float | None
+    prefered_order_cat: str | None
+    marital_status: str | None
 
     class Config:
         from_attributes = True
@@ -66,42 +48,22 @@ class CustomerDetail(BaseModel):
     risk_level: str
     top_reasons: list[str]
     reason_impacts: list[ReasonImpact]
-    phone_number: str | None
-    latest_retention_message: RetentionMessageResponse | None
-    sms_log: list[SmsLogEntry]
-
-
-class UpdatePhoneRequest(BaseModel):
-    phone_number: str
+    model_name: str  # the trained model that produced this prediction
 
 
 class CreateCustomerRequest(BaseModel):
-    tenure: float
-    city_tier: int
-    warehouse_to_home: float
-    preferred_login_device: str
-    preferred_payment_mode: str
-    gender: str
-    hour_spend_on_app: float
-    number_of_device_registered: int
+    tenure: float = Field(ge=0, le=100)
+    complain: int = Field(ge=0, le=1)
+    day_since_last_order: float = Field(ge=0, le=400)
+    cashback_amount: float = Field(ge=0, le=10000)
+    satisfaction_score: int = Field(ge=1, le=5)
+    number_of_address: int = Field(ge=0, le=50)
+    order_count: float = Field(ge=0, le=500)
+    warehouse_to_home: float = Field(ge=0, le=500)
     prefered_order_cat: str
-    satisfaction_score: int
     marital_status: str
-    number_of_address: int
-    complain: int
-    order_amount_hike_from_last_year: float
-    coupon_used: float
-    order_count: float
-    day_since_last_order: float
-    cashback_amount: float
-    review_text: str | None = None
-    phone_number: str | None = None
-    last_product_purchased: str | None = None
 
 
 class CustomerFieldOptions(BaseModel):
-    preferred_login_device: list[str]
-    preferred_payment_mode: list[str]
-    gender: list[str]
     prefered_order_cat: list[str]
     marital_status: list[str]

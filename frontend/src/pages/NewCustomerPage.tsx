@@ -9,69 +9,55 @@ import MenuItem from "@mui/material/MenuItem";
 import Grid from "@mui/material/Grid";
 import Button from "@mui/material/Button";
 import Alert from "@mui/material/Alert";
-import Stack from "@mui/material/Stack";
-import Divider from "@mui/material/Divider";
 import CircularProgress from "@mui/material/CircularProgress";
-import SentimentDissatisfiedIcon from "@mui/icons-material/SentimentDissatisfied";
-import SentimentSatisfiedIcon from "@mui/icons-material/SentimentSatisfied";
-import SentimentNeutralIcon from "@mui/icons-material/SentimentNeutral";
+import Divider from "@mui/material/Divider";
 import PersonSearchIcon from "@mui/icons-material/PersonSearch";
 import { createCustomer, getCustomerFieldOptions } from "../api/customers";
 import { RiskBadge } from "../components/RiskBadge";
 import { ReasonImpactChart } from "../components/ReasonImpactChart";
-import { RetentionMessagePanel } from "../components/RetentionMessagePanel";
 import type { CreateCustomerRequest, CustomerDetail, CustomerFieldOptions } from "../types";
 
-const EMPTY_FORM: CreateCustomerRequest = {
-  tenure: 0,
-  city_tier: 1,
-  warehouse_to_home: 0,
-  preferred_login_device: "",
-  preferred_payment_mode: "",
-  gender: "",
-  hour_spend_on_app: 0,
-  number_of_device_registered: 1,
-  prefered_order_cat: "",
-  satisfaction_score: 3,
-  marital_status: "",
-  number_of_address: 1,
-  complain: 0,
-  order_amount_hike_from_last_year: 0,
-  coupon_used: 0,
-  order_count: 0,
-  day_since_last_order: 0,
-  cashback_amount: 0,
-  review_text: "",
-  phone_number: "",
-  last_product_purchased: "",
-};
+type NumericKey = Exclude<keyof CreateCustomerRequest, "prefered_order_cat" | "marital_status">;
 
-const NUMERIC_FIELDS: { key: keyof CreateCustomerRequest; label: string }[] = [
-  { key: "tenure", label: "Tenure (months)" },
-  { key: "city_tier", label: "City tier (1-3)" },
-  { key: "warehouse_to_home", label: "Warehouse to home distance" },
-  { key: "hour_spend_on_app", label: "Hours spent on app" },
-  { key: "number_of_device_registered", label: "Devices registered" },
-  { key: "satisfaction_score", label: "Satisfaction score (1-5)" },
-  { key: "number_of_address", label: "Saved addresses" },
-  { key: "order_amount_hike_from_last_year", label: "Order amount hike vs last year (%)" },
-  { key: "coupon_used", label: "Coupons used" },
-  { key: "order_count", label: "Order count" },
-  { key: "day_since_last_order", label: "Days since last order" },
-  { key: "cashback_amount", label: "Cashback amount" },
+interface NumericField {
+  key: NumericKey;
+  label: string;
+  min: number;
+  max: number;
+  step?: number;
+  hint?: string;
+}
+
+const NUMERIC_FIELDS: NumericField[] = [
+  { key: "tenure", label: "Tenure", min: 0, max: 100, hint: "months as a customer" },
+  { key: "order_count", label: "Orders placed", min: 0, max: 500, hint: "last month" },
+  { key: "day_since_last_order", label: "Days since last order", min: 0, max: 400 },
+  { key: "cashback_amount", label: "Cashback earned", min: 0, max: 10000, step: 0.01 },
+  { key: "satisfaction_score", label: "Satisfaction score", min: 1, max: 5, hint: "1 (worst) to 5" },
+  { key: "number_of_address", label: "Saved addresses", min: 0, max: 50 },
+  { key: "warehouse_to_home", label: "Warehouse to home", min: 0, max: 500, hint: "delivery distance" },
 ];
 
-function SentimentIcon({ label }: { label: string | null }) {
-  if (label === "negative") return <SentimentDissatisfiedIcon color="error" fontSize="large" />;
-  if (label === "positive") return <SentimentSatisfiedIcon color="success" fontSize="large" />;
-  return <SentimentNeutralIcon color="warning" fontSize="large" />;
-}
+const EMPTY_FORM: Record<NumericKey, string> & { prefered_order_cat: string; marital_status: string; complain: string } = {
+  tenure: "",
+  order_count: "",
+  day_since_last_order: "",
+  cashback_amount: "",
+  satisfaction_score: "",
+  number_of_address: "",
+  warehouse_to_home: "",
+  complain: "0",
+  prefered_order_cat: "",
+  marital_status: "",
+};
+
+type FormState = typeof EMPTY_FORM;
 
 export function NewCustomerPage() {
   const navigate = useNavigate();
   const [options, setOptions] = useState<CustomerFieldOptions | null>(null);
-  const [form, setForm] = useState<CreateCustomerRequest>(EMPTY_FORM);
-  const [complain, setComplain] = useState(false);
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [showErrors, setShowErrors] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CustomerDetail | null>(null);
@@ -80,24 +66,43 @@ export function NewCustomerPage() {
     getCustomerFieldOptions().then(setOptions);
   }, []);
 
-  function setField<K extends keyof CreateCustomerRequest>(key: K, value: CreateCustomerRequest[K]) {
+  function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function fieldError(f: NumericField): string | null {
+    const raw = form[f.key];
+    if (raw === "") return "Required";
+    const n = Number(raw);
+    if (Number.isNaN(n) || n < f.min || n > f.max) return `Enter ${f.min} to ${f.max}`;
+    return null;
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setShowErrors(true);
 
-    if (!form.preferred_login_device || !form.preferred_payment_mode || !form.gender ||
-        !form.prefered_order_cat || !form.marital_status) {
-      setError("Please fill in all dropdown fields.");
+    if (NUMERIC_FIELDS.some(fieldError) || !form.prefered_order_cat || !form.marital_status) {
       return;
     }
 
+    const payload: CreateCustomerRequest = {
+      tenure: Number(form.tenure),
+      order_count: Number(form.order_count),
+      day_since_last_order: Number(form.day_since_last_order),
+      cashback_amount: Number(form.cashback_amount),
+      satisfaction_score: Math.round(Number(form.satisfaction_score)),
+      number_of_address: Math.round(Number(form.number_of_address)),
+      warehouse_to_home: Number(form.warehouse_to_home),
+      complain: Number(form.complain),
+      prefered_order_cat: form.prefered_order_cat,
+      marital_status: form.marital_status,
+    };
+
     setSubmitting(true);
     try {
-      const created = await createCustomer({ ...form, complain: complain ? 1 : 0 });
-      setResult(created);
+      setResult(await createCustomer(payload));
     } catch {
       setError("Could not run the prediction. Please check the values and try again.");
     } finally {
@@ -119,83 +124,57 @@ export function NewCustomerPage() {
         Predict Customer Churn
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Enter customer details to run the live churn model — this also saves the customer to your
-        records with the computed prediction.
+        Enter a few details to run the live churn model. The customer is saved to your records with
+        the computed prediction.
       </Typography>
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 7 }}>
           <Card variant="outlined">
             <CardContent>
-              <Typography variant="subtitle1" gutterBottom>
-                Customer details
-              </Typography>
-              <Box component="form" onSubmit={handleSubmit}>
+              <Box component="form" onSubmit={handleSubmit} noValidate>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Activity
+                </Typography>
+                <Grid container spacing={2} sx={{ mb: 3 }}>
+                  {NUMERIC_FIELDS.map((f) => {
+                    const err = showErrors ? fieldError(f) : null;
+                    return (
+                      <Grid size={{ xs: 12, sm: 6 }} key={f.key}>
+                        <TextField
+                          label={f.label}
+                          type="number"
+                          fullWidth
+                          size="small"
+                          value={form[f.key]}
+                          error={!!err}
+                          helperText={err ?? f.hint ?? " "}
+                          slotProps={{ htmlInput: { min: f.min, max: f.max, step: f.step ?? 1 } }}
+                          onChange={(e) => setField(f.key, e.target.value)}
+                        />
+                      </Grid>
+                    );
+                  })}
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      select
+                      label="Complaint filed?"
+                      fullWidth
+                      size="small"
+                      value={form.complain}
+                      helperText=" "
+                      onChange={(e) => setField("complain", e.target.value)}
+                    >
+                      <MenuItem value="0">No</MenuItem>
+                      <MenuItem value="1">Yes</MenuItem>
+                    </TextField>
+                  </Grid>
+                </Grid>
+
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Profile
+                </Typography>
                 <Grid container spacing={2}>
-                  {NUMERIC_FIELDS.map((f) => (
-                    <Grid size={{ xs: 12, sm: 6 }} key={f.key}>
-                      <TextField
-                        label={f.label}
-                        type="number"
-                        fullWidth
-                        size="small"
-                        value={form[f.key] as number}
-                        onChange={(e) => setField(f.key, Number(e.target.value) as never)}
-                      />
-                    </Grid>
-                  ))}
-
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField
-                      select
-                      label="Preferred login device"
-                      fullWidth
-                      size="small"
-                      value={form.preferred_login_device}
-                      onChange={(e) => setField("preferred_login_device", e.target.value)}
-                    >
-                      {options.preferred_login_device.map((v) => (
-                        <MenuItem key={v} value={v}>
-                          {v}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  </Grid>
-
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField
-                      select
-                      label="Preferred payment mode"
-                      fullWidth
-                      size="small"
-                      value={form.preferred_payment_mode}
-                      onChange={(e) => setField("preferred_payment_mode", e.target.value)}
-                    >
-                      {options.preferred_payment_mode.map((v) => (
-                        <MenuItem key={v} value={v}>
-                          {v}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  </Grid>
-
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField
-                      select
-                      label="Gender"
-                      fullWidth
-                      size="small"
-                      value={form.gender}
-                      onChange={(e) => setField("gender", e.target.value)}
-                    >
-                      {options.gender.map((v) => (
-                        <MenuItem key={v} value={v}>
-                          {v}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  </Grid>
-
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TextField
                       select
@@ -203,6 +182,8 @@ export function NewCustomerPage() {
                       fullWidth
                       size="small"
                       value={form.prefered_order_cat}
+                      error={showErrors && !form.prefered_order_cat}
+                      helperText={showErrors && !form.prefered_order_cat ? "Required" : " "}
                       onChange={(e) => setField("prefered_order_cat", e.target.value)}
                     >
                       {options.prefered_order_cat.map((v) => (
@@ -212,7 +193,6 @@ export function NewCustomerPage() {
                       ))}
                     </TextField>
                   </Grid>
-
                   <Grid size={{ xs: 12, sm: 6 }}>
                     <TextField
                       select
@@ -220,6 +200,8 @@ export function NewCustomerPage() {
                       fullWidth
                       size="small"
                       value={form.marital_status}
+                      error={showErrors && !form.marital_status}
+                      helperText={showErrors && !form.marital_status ? "Required" : " "}
                       onChange={(e) => setField("marital_status", e.target.value)}
                     >
                       {options.marital_status.map((v) => (
@@ -229,58 +211,10 @@ export function NewCustomerPage() {
                       ))}
                     </TextField>
                   </Grid>
-
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField
-                      select
-                      label="Has an open complaint?"
-                      fullWidth
-                      size="small"
-                      value={complain ? "yes" : "no"}
-                      onChange={(e) => setComplain(e.target.value === "yes")}
-                    >
-                      <MenuItem value="no">No</MenuItem>
-                      <MenuItem value="yes">Yes</MenuItem>
-                    </TextField>
-                  </Grid>
-
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField
-                      label="Phone number (optional)"
-                      placeholder="0771234567"
-                      fullWidth
-                      size="small"
-                      value={form.phone_number}
-                      onChange={(e) => setField("phone_number", e.target.value)}
-                    />
-                  </Grid>
-
-                  <Grid size={{ xs: 12, sm: 6 }}>
-                    <TextField
-                      label="Last product purchased (optional)"
-                      placeholder="e.g. Wireless Earbuds X200"
-                      fullWidth
-                      size="small"
-                      value={form.last_product_purchased}
-                      onChange={(e) => setField("last_product_purchased", e.target.value)}
-                    />
-                  </Grid>
-
-                  <Grid size={12}>
-                    <TextField
-                      label="Customer review / feedback (optional — scored for sentiment)"
-                      fullWidth
-                      multiline
-                      minRows={2}
-                      size="small"
-                      value={form.review_text}
-                      onChange={(e) => setField("review_text", e.target.value)}
-                    />
-                  </Grid>
                 </Grid>
 
                 {error && (
-                  <Alert severity="error" sx={{ mt: 2 }}>
+                  <Alert severity="error" sx={{ mt: 1 }}>
                     {error}
                   </Alert>
                 )}
@@ -288,7 +222,7 @@ export function NewCustomerPage() {
                 <Button
                   type="submit"
                   variant="contained"
-                  sx={{ mt: 3 }}
+                  sx={{ mt: 2 }}
                   disabled={submitting}
                   startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : undefined}
                 >
@@ -300,93 +234,68 @@ export function NewCustomerPage() {
         </Grid>
 
         <Grid size={{ xs: 12, md: 5 }}>
-          <Stack spacing={2}>
-            <Card variant="outlined">
-              <CardContent>
-                <Typography variant="subtitle1" gutterBottom>
-                  Prediction results
-                </Typography>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography variant="subtitle1" gutterBottom>
+                Prediction results
+              </Typography>
 
-                {!result ? (
-                  <Box
-                    sx={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      color: "text.secondary",
-                      py: 4,
-                    }}
+              {!result ? (
+                <Box
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    color: "text.secondary",
+                    py: 4,
+                  }}
+                >
+                  <PersonSearchIcon sx={{ fontSize: 40, mb: 1 }} />
+                  <Typography variant="body2">
+                    Fill in the form and click "Predict churn" to see results here.
+                  </Typography>
+                </Box>
+              ) : (
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Churn probability
+                  </Typography>
+                  <Typography
+                    variant="h3"
+                    color={result.risk_level === "high" ? "error" : result.risk_level === "medium" ? "warning" : "success"}
                   >
-                    <PersonSearchIcon sx={{ fontSize: 40, mb: 1 }} />
-                    <Typography variant="body2">
-                      Fill in the form and click "Predict churn" to see results here.
+                    {(result.churn_probability * 100).toFixed(0)}%
+                  </Typography>
+                  <RiskBadge level={result.risk_level} />
+
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+                    Predicted live by the {result.model_name} model
+                  </Typography>
+
+                  <Divider sx={{ my: 2 }} />
+
+                  <Typography variant="subtitle2" gutterBottom>
+                    Top reasons
+                  </Typography>
+                  {result.reason_impacts.length > 0 ? (
+                    <ReasonImpactChart reasons={result.reason_impacts} />
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      No risk factors to flag for this customer.
                     </Typography>
-                  </Box>
-                ) : (
-                  <Box>
-                    <Grid container spacing={2} sx={{ mb: 2 }}>
-                      <Grid size={6}>
-                        <Typography variant="caption" color="text.secondary">
-                          Churn probability
-                        </Typography>
-                        <Typography variant="h4" color="error">
-                          {(result.churn_probability * 100).toFixed(0)}%
-                        </Typography>
-                        <RiskBadge level={result.risk_level} />
-                      </Grid>
-                      <Grid size={6}>
-                        <Typography variant="caption" color="text.secondary">
-                          Sentiment
-                        </Typography>
-                        <Stack direction="row" spacing={1} sx={{ alignItems: "center", mt: 0.5 }}>
-                          <SentimentIcon label={result.profile.sentiment_label} />
-                          <Box>
-                            <Typography variant="body1" sx={{ textTransform: "capitalize" }}>
-                              {result.profile.sentiment_label ?? "n/a"}
-                            </Typography>
-                            {result.profile.sentiment_score !== null && (
-                              <Typography variant="caption" color="text.secondary">
-                                score {result.profile.sentiment_score.toFixed(2)}
-                              </Typography>
-                            )}
-                          </Box>
-                        </Stack>
-                      </Grid>
-                    </Grid>
+                  )}
 
-                    <Divider sx={{ mb: 2 }} />
-
-                    <Typography variant="subtitle2" gutterBottom>
-                      Top reasons (SHAP explanation)
-                    </Typography>
-                    {result.reason_impacts.length > 0 ? (
-                      <ReasonImpactChart reasons={result.reason_impacts} />
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        No strong churn-risk factors identified.
-                      </Typography>
-                    )}
-
-                    <Button
-                      size="small"
-                      sx={{ mt: 2 }}
-                      onClick={() => navigate(`/customers/${result.customer_id}`)}
-                    >
-                      View full customer record (#{result.customer_id})
-                    </Button>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-
-            {result && result.risk_level !== "low" && (
-              <RetentionMessagePanel
-                customerId={result.customer_id}
-                message={result.latest_retention_message}
-                onGenerated={(message) => setResult({ ...result, latest_retention_message: message })}
-              />
-            )}
-          </Stack>
+                  <Button
+                    size="small"
+                    sx={{ mt: 2 }}
+                    onClick={() => navigate(`/customers/${result.customer_id}`)}
+                  >
+                    View full customer record (#{result.customer_id})
+                  </Button>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
         </Grid>
       </Grid>
     </Box>

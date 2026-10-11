@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from pydantic import BaseModel
 
 
@@ -42,36 +40,3 @@ class ModelCurve(BaseModel):
 
 class RocCurveResponse(BaseModel):
     curves: list[ModelCurve]
-
-
-class SmsStats(BaseModel):
-    total_sent: int
-    successful: int
-    failed: int
-    dry_run_count: int
-    real_count: int
-
-
-class RetentionStats(BaseModel):
-    total_generated: int
-    gemini_generated: int
-    fallback_generated: int
-
-
-class RecentSmsEntry(BaseModel):
-    customer_id: int
-    phone_number: str
-    message: str | None
-    provider_status: str | None
-    success: bool
-    dry_run: bool
-    sent_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class EngagementAnalytics(BaseModel):
-    sms_stats: SmsStats
-    retention_stats: RetentionStats
-    recent_sms: list[RecentSmsEntry]

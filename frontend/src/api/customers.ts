@@ -34,13 +34,3 @@ export async function createCustomer(payload: CreateCustomerRequest): Promise<Cu
   const { data } = await apiClient.post<CustomerDetail>("/api/customers", payload);
   return data;
 }
-
-export async function updateCustomerPhone(
-  customerId: number,
-  phoneNumber: string
-): Promise<CustomerDetail> {
-  const { data } = await apiClient.put<CustomerDetail>(`/api/customers/${customerId}/phone`, {
-    phone_number: phoneNumber,
-  });
-  return data;
-}

@@ -5,12 +5,10 @@ import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
 import AddIcon from "@mui/icons-material/Add";
-import SmsIcon from "@mui/icons-material/Sms";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import { getCustomers } from "../api/customers";
 import { CustomerTable } from "../components/CustomerTable";
-import { BulkSmsDialog } from "../components/BulkSmsDialog";
 import type { CustomerSummary, RiskLevel } from "../types";
 
 export function CustomerListPage() {
@@ -24,8 +22,6 @@ export function CustomerListPage() {
   const [pageSize, setPageSize] = useState(20);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -51,48 +47,13 @@ export function CustomerListPage() {
     }
   }
 
-  function toggleRow(customerId: number) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(customerId)) {
-        next.delete(customerId);
-      } else {
-        next.add(customerId);
-      }
-      return next;
-    });
-  }
-
-  function toggleAllOnPage(checked: boolean) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      rows.forEach((row) => {
-        if (checked) {
-          next.add(row.customer_id);
-        } else {
-          next.delete(row.customer_id);
-        }
-      });
-      return next;
-    });
-  }
-
   return (
     <Box>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
         <Typography variant="h5">Customers</Typography>
-        <Box sx={{ display: "flex", gap: 1 }}>
-          <Button
-            variant="outlined"
-            startIcon={<SmsIcon />}
-            onClick={() => setBulkDialogOpen(true)}
-          >
-            Bulk SMS{selected.size > 0 ? ` (${selected.size})` : ""}
-          </Button>
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate("/customers/new")}>
-            Add customer
-          </Button>
-        </Box>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate("/customers/new")}>
+          Add customer
+        </Button>
       </Box>
 
       <Box sx={{ display: "flex", gap: 2, mb: 2, alignItems: "center", flexWrap: "wrap" }}>
@@ -135,17 +96,8 @@ export function CustomerListPage() {
           setPageSize(size);
           setPage(0);
         }}
-        selected={selected}
-        onToggleRow={toggleRow}
-        onToggleAllOnPage={toggleAllOnPage}
       />
 
-      <BulkSmsDialog
-        open={bulkDialogOpen}
-        onClose={() => setBulkDialogOpen(false)}
-        selectedIds={Array.from(selected)}
-        onDone={() => setSelected(new Set())}
-      />
     </Box>
   );
 }

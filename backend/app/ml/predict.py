@@ -3,27 +3,7 @@ import pandas as pd
 
 from app.config import settings
 from app.ml.artifacts import MLArtifacts
-from app.ml.features import (
-    BEHAVIORAL_COLS,
-    CATEGORICAL_COLS,
-    FEATURE_COLS,
-    FEATURE_LABELS,
-    TRAINING_MEDIANS,
-    VALUE_AWARE_LABELS,
-)
-
-
-def encode_row(row: pd.Series, encoders: dict) -> pd.Series:
-    out = row.copy()
-    for col in CATEGORICAL_COLS:
-        le = encoders[col]
-        value = str(row[col])
-        if value not in le.classes_:
-            # unseen category at inference time — fall back to the most common
-            # training class rather than raising, so a single bad row can't 500 the API.
-            value = le.classes_[0]
-        out[col] = le.transform([value])[0]
-    return out
+from app.ml.features import NON_REASON_COLS, VALUE_AWARE_LABELS
 
 
 def risk_level(prob: float) -> str:
@@ -34,9 +14,7 @@ def risk_level(prob: float) -> str:
     return "low"
 
 
-# SHAP values are in log-odds. Contributions below this are noise-level (the
-# training set's 25th percentile of positive SHAP is ~0.06, median ~0.18), so they
-# are not reported as churn reasons.
+# SHAP values are in log-odds; contributions below this are noise and not reported.
 MIN_REASON_SHAP = 0.1
 
 
@@ -44,61 +22,71 @@ def _fmt(value: float) -> str:
     return f"{value:g}" if float(value).is_integer() else f"{value:.1f}"
 
 
-def describe_feature(feat: str, value) -> str:
-    """Human label that matches the customer's actual value, not a fixed assumption."""
-    if feat in VALUE_AWARE_LABELS and value is not None and not pd.isna(value):
-        low, high, unit = VALUE_AWARE_LABELS[feat]
-        label = low if float(value) <= TRAINING_MEDIANS[feat] else high
-        return f"{label} ({_fmt(float(value))}{unit})"
+def describe_feature(feat: str, value, medians: dict[str, float]) -> str:
+    """Label that matches the customer's actual value, not a fixed assumption."""
     if feat == "Complain":
-        return "recent complaint filed" if value and float(value) > 0 else "no complaint filed"
-    if feat == "sentiment_score" and value is not None and not pd.isna(value):
-        return f"{'negative' if float(value) < 0 else 'positive'} review sentiment ({float(value):.2f})"
-    if feat == "PreferedOrderCat" and value is not None:
+        return "complaint filed" if value and float(value) > 0 else "no complaint filed"
+    if feat == "PreferedOrderCat":
         return f"preferred order category ({value})"
-    return FEATURE_LABELS.get(feat, feat)
+    low, high, unit = VALUE_AWARE_LABELS[feat]
+    label = low if float(value) <= medians[feat] else high
+    return f"{label} ({_fmt(float(value))}{unit})"
+
+
+def _churn_shap(explainer, X: pd.DataFrame) -> np.ndarray:
+    """SHAP values for the churn class, shape (n_rows, n_transformed_features)."""
+    values = explainer.shap_values(X)
+    if isinstance(values, list):
+        return np.asarray(values[1])
+    values = np.asarray(values)
+    return values[:, :, 1] if values.ndim == 3 else values
 
 
 def reason_impacts_for_row(
-    shap_row: np.ndarray, raw_row: pd.Series, n: int = 5, behavioral_only: bool = True
+    shap_row: np.ndarray, raw_row: pd.Series, artifacts: MLArtifacts, n: int = 5
 ) -> list[dict]:
-    """Top-n features meaningfully pushing this row toward churn, each with a label
-    describing the customer's real value and impact_pct = that feature's share of the
-    total positive (churn-pushing) SHAP weight among eligible features. Features whose
-    push is below MIN_REASON_SHAP are omitted, so a very safe customer can have none."""
-    eligible = set(BEHAVIORAL_COLS) if behavioral_only else set(FEATURE_COLS)
-    positive = [
-        (feat, float(val))
-        for feat, val in zip(FEATURE_COLS, shap_row)
-        if feat in eligible and val > 0
-    ]
-    total = sum(val for _, val in positive) or 1.0
+    """Top-n inputs pushing this row toward churn. One-hot columns are folded back onto
+    their source input; impact_pct is that input's share of the total churn-pushing weight."""
+    per_feature: dict[str, float] = {}
+    for src, val in zip(artifacts.shap_feature_sources, shap_row):
+        per_feature[src] = per_feature.get(src, 0.0) + float(val)
+
+    positive = [(f, v) for f, v in per_feature.items() if v > 0 and f not in NON_REASON_COLS]
+    total = sum(v for _, v in positive) or 1.0
     positive.sort(key=lambda t: t[1], reverse=True)
 
     return [
         {
-            "label": describe_feature(feat, raw_row.get(feat)),
-            "impact_pct": round((val / total) * 100, 1),
+            "label": describe_feature(feat, raw_row[feat], artifacts.medians),
+            "impact_pct": round(v / total * 100, 1),
         }
-        for feat, val in positive[:n]
-        if val >= MIN_REASON_SHAP
+        for feat, v in positive[:n]
+        if v >= MIN_REASON_SHAP
     ]
 
 
-def predict_and_explain(raw_row: pd.Series, artifacts: MLArtifacts) -> dict:
-    encoded = encode_row(raw_row[FEATURE_COLS], artifacts.label_encoders)
-    X = encoded.to_frame().T[artifacts.feature_columns].astype(float)
+def predict_and_explain(raw_rows: pd.DataFrame, artifacts: MLArtifacts) -> list[dict]:
+    """Scores a frame of customers (one column per model input). Batched so seeding
+    5k customers is one model/SHAP call rather than thousands."""
+    X = raw_rows[artifacts.feature_cols]
+    probs = artifacts.model.predict_proba(X)[:, 1]
+    X_t = artifacts.model.named_steps["pre"].transform(X)
+    shap_values = _churn_shap(artifacts.shap_explainer, X_t)
 
-    prob = float(artifacts.xgb_model.predict_proba(X)[0, 1])
-
-    shap_values = artifacts.shap_explainer.shap_values(X)
-    shap_row = shap_values[0] if not isinstance(shap_values, list) else shap_values[1][0]
-
-    impacts = reason_impacts_for_row(shap_row, raw_row, n=5, behavioral_only=True)
-
-    return {
-        "churn_probability": prob,
-        "risk_level": risk_level(prob),
-        "top_reasons": [r["label"] for r in impacts],
-        "reason_impacts": impacts,
-    }
+    out = []
+    for i, prob in enumerate(probs):
+        # A low-risk customer has nothing to be warned about: individual factors may push
+        # up a little, but the overall probability is small, so listing them misleads.
+        level = risk_level(float(prob))
+        impacts = (
+            [] if level == "low" else reason_impacts_for_row(shap_values[i], X.iloc[i], artifacts)
+        )
+        out.append(
+            {
+                "churn_probability": float(prob),
+                "risk_level": level,
+                "top_reasons": [r["label"] for r in impacts],
+                "reason_impacts": impacts,
+            }
+        )
+    return out

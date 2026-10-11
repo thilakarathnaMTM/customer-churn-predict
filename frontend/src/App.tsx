@@ -8,7 +8,6 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { CustomerListPage } from "./pages/CustomerListPage";
 import { CustomerDetailPage } from "./pages/CustomerDetailPage";
 import { NewCustomerPage } from "./pages/NewCustomerPage";
-import { SmsGatewaySettingsPage } from "./pages/SmsGatewaySettingsPage";
 
 function App() {
   return (
@@ -23,7 +22,6 @@ function App() {
                 <Route path="/customers" element={<CustomerListPage />} />
                 <Route path="/customers/new" element={<NewCustomerPage />} />
                 <Route path="/customers/:customerId" element={<CustomerDetailPage />} />
-                <Route path="/settings/sms-gateway" element={<SmsGatewaySettingsPage />} />
               </Route>
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

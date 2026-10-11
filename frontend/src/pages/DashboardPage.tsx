@@ -14,28 +14,25 @@ import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import VerifiedIcon from "@mui/icons-material/Verified";
 import InsightsIcon from "@mui/icons-material/Insights";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import { getDashboardSummary, getEngagementAnalytics, getRocCurve } from "../api/dashboard";
+import { getDashboardSummary, getRocCurve } from "../api/dashboard";
 import { StatCard } from "../components/StatCard";
 import { RiskDistributionChart } from "../components/RiskDistributionChart";
 import { ChurnDistributionChart } from "../components/ChurnDistributionChart";
 import { RocCurveChart } from "../components/RocCurveChart";
 import { ModelMetricsCard } from "../components/ModelMetricsCard";
-import { EngagementAnalyticsCard } from "../components/EngagementAnalyticsCard";
-import type { DashboardSummary, EngagementAnalytics, ModelCurve } from "../types";
+import type { DashboardSummary, ModelCurve } from "../types";
 
 export function DashboardPage() {
   const navigate = useNavigate();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [curves, setCurves] = useState<ModelCurve[] | null>(null);
-  const [engagement, setEngagement] = useState<EngagementAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([getDashboardSummary(), getRocCurve(), getEngagementAnalytics()])
-      .then(([summaryRes, rocRes, engagementRes]) => {
+    Promise.all([getDashboardSummary(), getRocCurve()])
+      .then(([summaryRes, rocRes]) => {
         setSummary(summaryRes);
         setCurves(rocRes.curves);
-        setEngagement(engagementRes);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -85,8 +82,8 @@ export function DashboardPage() {
             <Box>
               <Typography variant="subtitle1">Predict a customer's churn risk</Typography>
               <Typography variant="body2" color="text.secondary">
-                Run the live model on a new or hypothetical customer and get SHAP reasons + an AI
-                retention message instantly.
+                Run the live model on a new or hypothetical customer and get the risk level and the
+                reasons behind it instantly.
               </Typography>
             </Box>
           </Stack>
@@ -180,8 +177,8 @@ export function DashboardPage() {
               </Typography>
               {curves && <RocCurveChart curves={curves} />}
               <Typography variant="caption" color="text.secondary">
-                Computed live from the two trained models (XGBoost, Random Forest) against a
-                held-out test split.
+                XGBoost and Random Forest, evaluated on a
+                held-out test split (20% of customers, never used for training or tuning).
               </Typography>
             </CardContent>
           </Card>
@@ -190,12 +187,6 @@ export function DashboardPage() {
           <ModelMetricsCard metrics={summary.model_metrics} bestModelName={summary.best_model_name} />
         </Grid>
       </Grid>
-
-      {engagement && (
-        <Box sx={{ mt: 2 }}>
-          <EngagementAnalyticsCard data={engagement} />
-        </Box>
-      )}
     </Box>
   );
 }

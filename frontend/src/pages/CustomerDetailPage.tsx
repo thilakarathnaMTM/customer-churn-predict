@@ -12,8 +12,7 @@ import Button from "@mui/material/Button";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { getCustomerDetail } from "../api/customers";
 import { RiskBadge } from "../components/RiskBadge";
-import { RetentionMessagePanel } from "../components/RetentionMessagePanel";
-import { SendSmsPanel } from "../components/SendSmsPanel";
+import { ReasonImpactChart } from "../components/ReasonImpactChart";
 import type { CustomerDetail } from "../types";
 
 export function CustomerDetailPage() {
@@ -54,97 +53,47 @@ export function CustomerDetailPage() {
         <Typography variant="h5">Customer #{detail.customer_id}</Typography>
         <RiskBadge level={detail.risk_level} />
         <Chip label={`${(detail.churn_probability * 100).toFixed(1)}% churn probability`} />
+        <Chip variant="outlined" label={`Model: ${detail.model_name}`} />
       </Stack>
 
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 6 }}>
-          <Card variant="outlined" sx={{ mb: 2 }}>
+          <Card variant="outlined" sx={{ height: "100%" }}>
             <CardContent>
               <Typography variant="subtitle1" gutterBottom>
-                Why this customer is at risk (SHAP)
+                Main risk factors
               </Typography>
-              {detail.top_reasons.length === 0 ? (
+              {detail.reason_impacts.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">
-                  No strong churn-risk factors identified.
+                  No risk factors to flag for this customer.
                 </Typography>
               ) : (
-                <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-                  {detail.top_reasons.map((reason) => (
-                    <Chip key={reason} label={reason} color="warning" variant="outlined" />
-                  ))}
-                </Stack>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card variant="outlined">
-            <CardContent>
-              <Typography variant="subtitle1" gutterBottom>
-                Profile
-              </Typography>
-              <Grid container spacing={1}>
-                <ProfileField label="Tenure (months)" value={p.tenure} />
-                <ProfileField label="Order count" value={p.order_count} />
-                <ProfileField label="Days since last order" value={p.day_since_last_order} />
-                <ProfileField label="Complaints" value={p.complain ? "Yes" : "No"} />
-                <ProfileField label="Satisfaction score" value={p.satisfaction_score} />
-                <ProfileField label="Cashback amount" value={p.cashback_amount} />
-                <ProfileField label="Preferred order category" value={p.prefered_order_cat} />
-                <ProfileField
-                  label="Last product purchased"
-                  value={
-                    p.last_product_purchased
-                      ? `${p.last_product_purchased}${p.last_product_purchased_is_generated ? "" : ""}`
-                      : null
-                  }
-                />
-                <ProfileField label="Preferred payment mode" value={p.preferred_payment_mode} />
-                <ProfileField label="Sentiment" value={p.sentiment_label} />
-                <ProfileField label="Review rating" value={p.review_rating ? `${p.review_rating} / 5` : null} />
-              </Grid>
-              {p.review_text && (
-                <Box sx={{ mt: 2 }}>
-                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-                    <Typography variant="caption" color="text.secondary">
-                      Latest review
-                    </Typography>
-                    {/* {p.review_is_synthetic && (
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        color="warning"
-                        label="sample review, not from this customer"
-                      />
-                    )} */}
-                  </Stack>
-                  <Typography variant="body2" sx={{ fontStyle: "italic" }}>
-                    "{p.review_text}"
-                  </Typography>
-                </Box>
+                <ReasonImpactChart reasons={detail.reason_impacts} />
               )}
             </CardContent>
           </Card>
         </Grid>
 
         <Grid size={{ xs: 12, md: 6 }}>
-          <Stack spacing={2}>
-            <RetentionMessagePanel
-              customerId={detail.customer_id}
-              message={detail.latest_retention_message}
-              onGenerated={(message) => setDetail({ ...detail, latest_retention_message: message })}
-            />
-            <SendSmsPanel
-              customerId={detail.customer_id}
-              phoneNumber={detail.phone_number}
-              hasMessage={!!detail.latest_retention_message?.sms_text?.trim()}
-              smsLog={detail.sms_log}
-              onPhoneUpdated={(phone) => setDetail({ ...detail, phone_number: phone })}
-              onSent={() => {
-                if (!customerId) return;
-                getCustomerDetail(Number(customerId)).then(setDetail);
-              }}
-            />
-          </Stack>
+          <Card variant="outlined" sx={{ height: "100%" }}>
+            <CardContent>
+              <Typography variant="subtitle1" gutterBottom>
+                Profile
+              </Typography>
+              <Grid container spacing={1.5}>
+                <ProfileField label="Tenure (months)" value={p.tenure} />
+                <ProfileField label="Order count" value={p.order_count} />
+                <ProfileField label="Days since last order" value={p.day_since_last_order} />
+                <ProfileField label="Complaint filed" value={p.complain ? "Yes" : "No"} />
+                <ProfileField label="Satisfaction score" value={p.satisfaction_score} />
+                <ProfileField label="Cashback amount" value={p.cashback_amount} />
+                <ProfileField label="Saved addresses" value={p.number_of_address} />
+                <ProfileField label="Warehouse to home distance" value={p.warehouse_to_home} />
+                <ProfileField label="Preferred order category" value={p.prefered_order_cat} />
+                <ProfileField label="Marital status" value={p.marital_status} />
+              </Grid>
+            </CardContent>
+          </Card>
         </Grid>
       </Grid>
     </Box>

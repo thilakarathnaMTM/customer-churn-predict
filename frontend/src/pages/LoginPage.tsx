@@ -402,11 +402,11 @@ export function LoginPage() {
                 <Typography
                   sx={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", color: "rgba(255,255,255,.5)" }}
                 >
-                  Retention forecast · 90d
+                  Churn outlook · 90d
                 </Typography>
                 <Box sx={{ display: "flex", gap: 2 }}>
                   {[
-                    ["Retained", T.retain],
+                    ["Stable", T.retain],
                     ["At risk", T.risk],
                   ].map(([label, tone]) => (
                     <Box key={label} sx={{ display: "flex", alignItems: "center", gap: 0.7 }}>

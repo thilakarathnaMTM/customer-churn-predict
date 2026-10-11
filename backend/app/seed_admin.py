@@ -7,6 +7,7 @@ import argparse
 
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.models.admin_user import AdminUser
 from app.security import hash_password
@@ -33,9 +34,11 @@ def seed_admin(db: Session, username: str, password: str) -> AdminUser:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--username", required=True)
-    parser.add_argument("--password", required=True)
+    parser.add_argument("--username", default=settings.ADMIN_SEED_USERNAME)
+    parser.add_argument("--password", default=settings.ADMIN_SEED_PASSWORD)
     args = parser.parse_args()
+    if not args.username or not args.password:
+        parser.error("pass --username/--password or set ADMIN_SEED_USERNAME/ADMIN_SEED_PASSWORD in backend/.env")
 
     session = SessionLocal()
     try:
